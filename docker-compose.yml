@@ -1,0 +1,34 @@
+services:
+  # Jenkins用コンテナ
+  jenkins:
+    build:
+      context: ./jenkins
+    image: jenkins:test0
+    container_name: jenkins-test
+    user: root
+    ports:
+      - "8080:8080"
+      - "8000:80"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - .:/workspace
+      - ./jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      HOST_WORKSPACE: ${PWD}
+    restart: unless-stopped
+
+  # C++ビルド用コンテナ
+  cpp-builder:
+    build:
+      context: ./builder/cpp
+    image: cpp-builder:test0
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    profiles:
+      - tools
+
+# Jenkinsのホームディレクトリを永続化するためのボリューム
+volumes:
+  jenkins_home:

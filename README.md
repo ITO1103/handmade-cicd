@@ -1,6 +1,6 @@
 # Handmade-CI/CD
 
-CI/CD の学習用リポジトリ．
+CI/CD の学習用レポジトリ．
 
 まずはJenkinsで簡単なC++コードをコンパイルできる状態に．
 
@@ -10,16 +10,20 @@ CI/CD の学習用リポジトリ．
 - GroovyによるJenkinsジョブの構築
 - 簡単なC++コードのビルド
 - 簡単なVulkanコードのビルド
-- Git Pushによるビルドの自動化
+- ローカルGit Pushによるビルドの自動化
 - テストの自動化
 - 静的解析による検査 (MISRA C++？)
 - Windows containerへの対応 (移行)
-- 形式的検証の導入 (研究？)
+- 形式的検証の導入 (研究)
 
 ## 構成
 可能な限り再現性を保つため，コンテナ上で動作するようにする．
 
 まずは経験のあるLinuxコンテナで構築する．
+
+>※現状macOSもしくはLinuxでしか動作しません！  
+bareレポジトリをローカルに作成し，それに対するPushによってJenkinsのビルドがトリガーされるようにするが，bareレポジトリの作成シェルスクリプトはmacOSもしくはLinux用である．  
+Windows(PowerShell)は今後対応予定．
 
 ### コンテナ
 2つのコンテナで構成される．
@@ -47,7 +51,7 @@ C++ builder
 
 ### Job
 `jenkins/init.groovy.d/create-cpp-job.groovy`がJenkins起動時に `cpp-hello`というC++をコンパイルするだけのjobを作成する．
-このjobはリポジトリルートの`Jenkinsfile`を読み込む．
+このjobはローカルのbareレポジトリからレポジトリルートの`Jenkinsfile`を読み込む．
 
 これにより，Jenkins上でジョブを手動で構築することなく，構築された状態で起動する．
 
@@ -55,6 +59,32 @@ C++ builder
 ```sh
 docker compose restart jenkins
 ```
+
+### ローカルremote
+GitHubにはpushせず，レポジトリ内のローカルbareレポジトリをリモートとして使う．
+
+初回にローカルリモートレポジトリを作成し，現在のブランチをmirror pushする．
+
+ローカルbareレポジトリの作成と Jenkins のビルドトリガー用の認証トークンの生成用シェルスクリプト
+```sh
+bash scripts/setup-local-remote.sh
+```
+
+以後はローカルリモートにpushする．
+```sh
+git add (ビルドするファイルへのパス)
+```
+
+```sh
+git commit -m "コメント"
+```
+
+```sh
+git push local main
+```
+
+ローカルリモートの`post-receive`hookがJenkinsの`cpp-hello`を直接起動するので，pushした直後にビルドが走る．
+ローカルbareレポジトリからのcheckoutを許可するため，Jenkinsコンテナに`JAVA_TOOL_OPTIONS`で`hudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true` を設定する必要がある．
 
 ### Pipeline
 `Jenkinsfile`はJenkins Pipelineの定義ファイル．
@@ -65,6 +95,7 @@ docker compose restart jenkins
 1. `cpp-builder:test0`を`builder/cpp/Dockerfile`からビルドする
 2. C++ Builderで`src/hello.cpp`を`build/hello`にコンパイルし，実行
 3. コンパイル結果を実行後，`build/`を削除し，コンテナを破棄する
+4. ローカルリモートへのpushをJenkinsが検知して再実行する
 
 ソースが入力を必要とする場合，無限に終わらない状態となるので，タイムアウトを設定している．
 
@@ -85,6 +116,12 @@ docker compose exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
 起動し管理者アカウントを作成後，`cpp-hello`という名前のジョブが作成されているので，緑色の再生ボタンを押してジョブを実行．
+
+※ローカルリモートをまだ作っていなければ，先に以下を実行してからJenkinsを再起動．
+```sh
+bash scripts/setup-local-remote.sh
+docker compose restart jenkins
+```
 
 ジョブの詳細画面から，`Console Output`を確認し，`Hello, world!`と表示されているかを確認．
 

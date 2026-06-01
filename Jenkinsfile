@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    // ビルドの同時実行を禁止する (今回は同時に複数ビルドを行わないため発生しないが，ローカルリポジトリを複数ビルドが同時に触ると競合する可能性があるためそれを禁止する)
+    options {
+        disableConcurrentBuilds()
+    }
+
     stages {
         stage('Prepare Builder') { // C++ビルド用のDockerイメージを作成
             steps {

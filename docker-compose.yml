@@ -16,6 +16,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       HOST_WORKSPACE: ${PWD}
+      JAVA_TOOL_OPTIONS: -Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true # JenkinsのGitプラグインがローカルリポジトリを許可するように設定
     restart: unless-stopped
 
   # C++ビルド用コンテナ

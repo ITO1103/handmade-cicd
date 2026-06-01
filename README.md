@@ -16,6 +16,13 @@ CI/CD の学習用レポジトリ．
 - Windows containerへの対応 (移行)
 - 形式的検証の導入 (研究)
 
+## 完了
+- Jenkinsの構築
+- GroovyによるJenkinsジョブの構築
+- ローカルGit Pushによるビルドの自動化
+- 簡単なC++コードのビルド
+- 出力の簡単なテスト
+
 ## 構成
 可能な限り再現性を保つため，コンテナ上で動作するようにする．
 
@@ -51,7 +58,7 @@ C++ builder
 
 ### Job
 `jenkins/init.groovy.d/create-cpp-job.groovy`がJenkins起動時に `cpp-hello`というC++をコンパイルするだけのjobを作成する．
-このjobはローカルのbareレポジトリからレポジトリルートの`Jenkinsfile`を読み込む．
+このjobはローカルのbareレポジトリからレポジトリルートの`Jenkinsfile`を読み込む．そのため，JenkinsfileをbareレポジトリにPushする必要があるので注意．
 
 これにより，Jenkins上でジョブを手動で構築することなく，構築された状態で起動する．
 
@@ -85,6 +92,10 @@ git push local main
 
 ローカルリモートの`post-receive`hookがJenkinsの`cpp-hello`を直接起動するので，pushした直後にビルドが走る．
 ローカルbareレポジトリからのcheckoutを許可するため，Jenkinsコンテナに`JAVA_TOOL_OPTIONS`で`hudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true` を設定する必要がある．
+
+Jenkinsfileを更新した場合は，`git add Jenkinsfile`，`git commit -m "コメント"`，`git push local main`をする．
+
+一方で，`scripts/setup-local-remote.sh`や`jenkins/init.groovy.d/create-cpp-job.groovy`を更新した場合は，`bash scripts/setup-local-remote.sh`を再実行し，必要ならJenkinsを再起動する．(未検証)
 
 ### Pipeline
 `Jenkinsfile`はJenkins Pipelineの定義ファイル．

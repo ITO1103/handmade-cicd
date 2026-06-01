@@ -37,6 +37,22 @@ pipeline {
                 }
             }
         }
+        stage('Output Test') { // ビルドしたC++の出力をテスト (出力に[TEST]が含まれていることを確認する簡単なテスト)
+            steps {
+                script {
+                    def output = sh(script: '''
+                        docker run --rm \
+                            -v "$HOST_WORKSPACE:/workspace" \
+                            -w /workspace \
+                            cpp-builder:test0 \
+                            sh -lc './build/hello'
+                    ''', returnStdout: true).trim()
+                    if (!output.contains('TEST')) {
+                        error "Unexpected output: ${output}"
+                    }
+                }
+            }
+        }
 
     }
 

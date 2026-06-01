@@ -26,9 +26,9 @@ pipeline {
         }
         stage('Execute') { // ビルドしたC++を実行
             steps {
-                timeout(time: 30, unit: 'SECONDS') { // 念の為タイムアウト (対話のやつを入れてしまった場合，無限に入力待ちで終わらない可能性があるので)
+                timeout(time: 30, unit: 'SECONDS') { // 念の為タイムアウト (対話のやつを入れてしまった場合，無限に入力待ちで終わらない可能性があるので) // 入力はとりあえず0を入れておく(入れないと入力待ちでタイムアウトになる)
                     sh '''
-                        docker run --rm \
+                        printf '0\n0\n' | docker run --rm -i \
                             -v "$HOST_WORKSPACE:/workspace" \
                             -w /workspace \
                             cpp-builder:test0 \
@@ -39,15 +39,33 @@ pipeline {
         }
         stage('Output Test') { // ビルドしたC++の出力をテスト (出力に[TEST]が含まれていることを確認する簡単なテスト)
             steps {
-                script {
+                script { 
                     def output = sh(script: '''
-                        docker run --rm \
+                        printf '0\n0\n' | docker run --rm -i \
                             -v "$HOST_WORKSPACE:/workspace" \
                             -w /workspace \
                             cpp-builder:test0 \
                             sh -lc './build/hello'
                     ''', returnStdout: true).trim()
+                    echo "Output: ${output}" // 出力を表示させる
                     if (!output.contains('TEST')) {
+                        error "Unexpected output: ${output}"
+                    }
+                }
+            }
+        }
+        stage('Sum TEST') { // ビルドしたC++の入力に対する出力をテスト (入力に3と5を与えたときに出力に[Sum: 8]が含まれていることを確認する)
+            steps {
+                script { // echoでは入力を渡せなかったのでprintfで入力を渡す
+                    def output = sh(script: '''
+                        printf '3\n5\n' | docker run --rm -i \
+                            -v "$HOST_WORKSPACE:/workspace" \
+                            -w /workspace \
+                            cpp-builder:test0 \
+                            sh -lc './build/hello'
+                    ''', returnStdout: true).trim()
+                    echo "Output: ${output}" // 出力を表示
+                    if (!output.contains('Sum: 8')) {
                         error "Unexpected output: ${output}"
                     }
                 }

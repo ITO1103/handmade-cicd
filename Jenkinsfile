@@ -15,24 +15,46 @@ pipeline {
 
         stage('CppCheck_overflow') { // C++静的解析の実行
             steps {
-                sh 'docker run --rm -v "$HOST_WORKSPACE:/workspace" \
+                script {
+                    def output = sh(script: '''
+                     docker run --rm -v "$HOST_WORKSPACE:/workspace" \
                         -w /workspace \
                         cppcheck:test0 \
                         cppcheck --enable=all \
-                        src/overflow.cpp'
-                    // style/performance/portability/information/unusedFunction/missingIncludeはUNSTABLE
-                    // warningはerror
-                    // なにも出なければSUCCESSにしたい
+                        src/overflow.cpp 2>&1
+                    ''', returnStdout: true).trim()
+                    echo "CppCheck Output: ${output}" // cppcheckの出力を表示
+                    if (output.contains('error')) { // 静的解析の結果がerrorの場合はビルドを失敗させる
+                        error "CppCheck found errors: ${output}"
+                    } else if (output.contains('warning')) { // warningの場合はUNSTABLEにする
+                        unstable "CppCheck found warnings: ${output}"
+                    } else { // 正常状態
+                        echo "CppCheck found no issues."
+                    }
+                }
+
             }
         }
 
         stage('CppCheck_memleak') { // C++静的解析の実行
             steps {
-                sh 'docker run --rm -v "$HOST_WORKSPACE:/workspace" \
+                script {
+                    def output = sh(script: '''
+                     docker run --rm -v "$HOST_WORKSPACE:/workspace" \
                         -w /workspace \
                         cppcheck:test0 \
                         cppcheck --enable=all \
-                        src/memleak.cpp'
+                        src/memleak.cpp 2>&1
+                    ''', returnStdout: true).trim()
+                    echo "CppCheck Output: ${output}" // cppcheckの出力を表示
+                    if (output.contains('error')) { // 静的解析の結果がerrorの場合はビルドを失敗させる
+                        error "CppCheck found errors: ${output}"
+                    } else if (output.contains('warning')) { // warningの場合はUNSTABLEにする
+                        unstable "CppCheck found warnings: ${output}"
+                    } else { // 正常状態
+                        echo "CppCheck found no issues."
+                    }
+                }
             }
         }
 

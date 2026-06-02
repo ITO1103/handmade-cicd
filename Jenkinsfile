@@ -7,6 +7,35 @@ pipeline {
     }
 
     stages {
+        stage('Prepare CppCheck') { // C++静的解析(cppcheck)用のDockerイメージを作成
+            steps {
+                sh 'docker build -t cppcheck:test0 /workspace/cppcheck'
+            }
+        }
+
+        stage('CppCheck_overflow') { // C++静的解析の実行
+            steps {
+                sh 'docker run --rm -v "$HOST_WORKSPACE:/workspace" \
+                        -w /workspace \
+                        cppcheck:test0 \
+                        cppcheck --enable=all \
+                        src/overflow.cpp'
+                    // style/performance/portability/information/unusedFunction/missingIncludeはUNSTABLE
+                    // warningはerror
+                    // なにも出なければSUCCESSにしたい
+            }
+        }
+
+        stage('CppCheck_memleak') { // C++静的解析の実行
+            steps {
+                sh 'docker run --rm -v "$HOST_WORKSPACE:/workspace" \
+                        -w /workspace \
+                        cppcheck:test0 \
+                        cppcheck --enable=all \
+                        src/memleak.cpp'
+            }
+        }
+
         stage('Prepare Builder') { // C++ビルド用のDockerイメージを作成
             steps {
                 sh 'docker build -t cpp-builder:test0 /workspace/builder/cpp'

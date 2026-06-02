@@ -30,6 +30,17 @@ services:
     profiles:
       - tools
 
+  # 静的解析用コンテナ
+  cppcheck:
+    build:
+      context: ./cppcheck
+    image: cppcheck:test0
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    profiles:
+      - tools
+
 # Jenkinsのホームディレクトリを永続化するためのボリューム
 volumes:
   jenkins_home:

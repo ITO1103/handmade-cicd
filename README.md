@@ -24,6 +24,7 @@ CI/CD の学習用レポジトリ．
 - 出力の簡単なテスト
 - 簡単な入力に対する出力テスト
 - cppcheckによる静的解析
+- cppcheckの警告によってUNSTABLE，FAILUREを分ける
 
 ## 構成
 可能な限り再現性を保つため，コンテナ上で動作するようにする．
@@ -59,8 +60,12 @@ C++ builder
 
 
 ### Job
-`jenkins/init.groovy.d/create-cpp-job.groovy`がJenkins起動時に `cpp-hello`というC++をコンパイルするだけのjobを作成する．
-このjobはローカルのbareレポジトリからレポジトリルートの`Jenkinsfile`を読み込む．そのため，JenkinsfileをbareレポジトリにPushする必要があるので注意．
+`jenkins/init.groovy.d/create-cpp-job.groovy`がJenkins起動時に 
+- `cpp-hello` : C++コードの静的解析ビルドと実行，入出力テストを行うジョブ．
+- `cppcheck-warning` : cppcheckによる静的解析で警告が出た場合にUNSTABLEとするジョブ．
+- `cppcheck-error` : cppcheckによる静的解析でエラーが出た場合にビルド失敗とするジョブ．
+
+このjobはローカルのbareレポジトリからレポジトリルートの`Jenkinsfile_*`を読み込む．そのため，JenkinsfileをbareレポジトリにPushする必要があるので注意．
 
 これにより，Jenkins上でジョブを手動で構築することなく，構築された状態で起動する．
 
@@ -92,7 +97,9 @@ git commit -m "コメント"
 git push local main
 ```
 
-ローカルリモートの`post-receive`hookがJenkinsの`cpp-hello`を直接起動するので，pushした直後にビルドが走る．
+ローカルリモートの`post-receive`hookが変更されたファイルを見て，該当するJenkinsジョブを起動する．
+例えば`src/hello.cpp`や`Jenkinsfile_hello`が変われば`cpp-hello`，`src/overflow.cpp`や`Jenkinsfile_warning`が変われば`cppcheck-warning`，`src/memleak.cpp`や`Jenkinsfile_error`が変われば`cppcheck-error`が動く．
+
 ローカルbareレポジトリからのcheckoutを許可するため，Jenkinsコンテナに`JAVA_TOOL_OPTIONS`で`hudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true` を設定する必要がある．
 
 Jenkinsfileを更新した場合は，`git add Jenkinsfile`，`git commit -m "コメント"`，`git push local main`をする．

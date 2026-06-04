@@ -36,23 +36,73 @@ git -C "$repo_root" push --mirror local
 git -C "$remote_dir" symbolic-ref HEAD refs/heads/main || true
 
 # Jenkins のビルドトリガー用の post-receive hook を配置
-cat > "$hook_file" <<EOF
+cat > "$hook_file" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
 # Jenkins のビルドトリガー用の認証トークンを環境変数から読み込む
-repo_root="$repo_root"
-trigger_token="$trigger_token"
+repo_root="__REMOTE_DIR__"
+trigger_token="__TRIGGER_TOKEN__"
 
-# main ブランチへの push のみをトリガーとする
+trigger_job() {
+  local job_name="$1"
+  curl -fsS "http://localhost:8080/job/${job_name}/build?delay=0&token=${trigger_token}" >/dev/null
+}
+
 while read -r oldrev newrev refname; do
-  if [[ "\$refname" != "refs/heads/main" ]]; then
+  if [[ "$refname" != "refs/heads/main" ]]; then
     continue
   fi
 
-  curl -fsS "http://localhost:8080/job/cpp-hello/build?delay=0&token=${trigger_token}" >/dev/null
+  if [[ "$oldrev" =~ ^0+$ ]]; then
+    changed_files="$(git -C "$repo_root" ls-tree -r --name-only "$newrev")"
+  else
+    changed_files="$(git -C "$repo_root" diff --name-only "$oldrev" "$newrev")"
+  fi
+
+  trigger_cpp_hello=false
+  trigger_cppcheck_warning=false
+  trigger_cppcheck_error=false
+
+  while IFS= read -r path; do
+    case "$path" in
+      src/hello.cpp|Jenkinsfile|Jenkinsfile_hello)
+        trigger_cpp_hello=true
+        ;;
+      src/overflow.cpp|Jenkinsfile_warning)
+        trigger_cppcheck_warning=true
+        ;;
+      src/memleak.cpp|Jenkinsfile_error)
+        trigger_cppcheck_error=true
+        ;;
+    esac
+  done <<< "$changed_files"
+
+  if [[ "$trigger_cpp_hello" == true ]]; then
+    trigger_job cpp-hello
+  fi
+
+  if [[ "$trigger_cppcheck_warning" == true ]]; then
+    trigger_job cppcheck-warning
+  fi
+
+  if [[ "$trigger_cppcheck_error" == true ]]; then
+    trigger_job cppcheck-error
+  fi
 done
 EOF
+
+if sed --version >/dev/null 2>&1; then
+  sed -i \
+    -e "s|__REMOTE_DIR__|$remote_dir|g" \
+    -e "s|__TRIGGER_TOKEN__|$trigger_token|g" \
+    "$hook_file"
+else
+  sed -i '' \
+    -e "s|__REMOTE_DIR__|$remote_dir|g" \
+    -e "s|__TRIGGER_TOKEN__|$trigger_token|g" \
+    "$hook_file"
+fi
 chmod +x "$hook_file"
 
 # デバッグ用ログ

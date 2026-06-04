@@ -1,3 +1,4 @@
+// Cppcckeckでerrorになる例
 #include <iostream>
  
 void memoryLeakExample() {

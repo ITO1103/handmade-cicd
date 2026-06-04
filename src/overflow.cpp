@@ -1,3 +1,4 @@
+// Cppcheckでwarningになる例
 #include <iostream>
  
 void foo(int x)

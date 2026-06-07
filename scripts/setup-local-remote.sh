@@ -63,6 +63,7 @@ while read -r oldrev newrev refname; do
   trigger_cpp_hello=false
   trigger_cppcheck_warning=false
   trigger_cppcheck_error=false
+  trigger_vulkan=false
 
   while IFS= read -r path; do
     case "$path" in
@@ -74,6 +75,9 @@ while read -r oldrev newrev refname; do
         ;;
       src/memleak.cpp|Jenkinsfile_error)
         trigger_cppcheck_error=true
+        ;;
+      src/basecode.cpp|Jenkinsfile_Vulkan)
+        trigger_vulkan=true
         ;;
     esac
   done <<< "$changed_files"
@@ -88,6 +92,10 @@ while read -r oldrev newrev refname; do
 
   if [[ "$trigger_cppcheck_error" == true ]]; then
     trigger_job cppcheck-error
+  fi
+
+  if [[ "$trigger_vulkan" == true ]]; then
+    trigger_job vulkan
   fi
 done
 EOF

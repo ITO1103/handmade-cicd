@@ -40,6 +40,17 @@ services:
       - .:/workspace
     profiles:
       - tools
+  
+  # vulkanビルド用コンテナ
+  vulkan-builder:
+    build:
+      context: ./builder/vulkan
+    image: vulkan-builder:test0
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    profiles:
+      - tools
 
 # Jenkinsのホームディレクトリを永続化するためのボリューム
 volumes:

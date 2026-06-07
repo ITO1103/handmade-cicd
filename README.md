@@ -64,6 +64,7 @@ C++ builder
 - `cpp-hello` : C++コードの静的解析ビルドと実行，入出力テストを行うジョブ．
 - `cppcheck-warning` : cppcheckによる静的解析で警告が出た場合にUNSTABLEとするジョブ．
 - `cppcheck-error` : cppcheckによる静的解析でエラーが出た場合にビルド失敗とするジョブ．
+- `vulkan` : Vulkanコードをビルドするジョブ．
 
 このjobはローカルのbareレポジトリからレポジトリルートの`Jenkinsfile_*`を読み込む．そのため，JenkinsfileをbareレポジトリにPushする必要があるので注意．
 
@@ -127,6 +128,13 @@ cppcheckによる静的解析をビルド前に行う．
 
 warningはUNSTABLE，errorはビルド失敗とする．
 
+### Vulkan
+`builder/vulkan/Dockerfile`でVulkan SDK入りのビルド用イメージを作り，`Jenkinsfile_Vulkan`で `src/vulkan.cpp` をコンパイルする．
+Linux版のVulkan SDKは展開後の `x86_64` 配下に `include` と `lib` があるため，ビルド用コンテナでは `VULKAN_SDK=/opt/vulkansdk/default/x86_64` 相当のパスを使う．
+ビルド前に `src/shader.slang` を `slangc` で `shaders/slang.spv` に変換してから，`src/vulkan.cpp` をコンパイルする．
+リンク時は `-L"$VULKAN_SDK/lib"` を付けて `libvulkan.so` を見つけるようにしている．
+Apple Silicon 環境では Vulkan ジョブの `Prepare` だけ `DOCKER_DEFAULT_PLATFORM=linux/amd64` と `DOCKER_BUILDKIT=0` を付けて amd64 版イメージを作る．
+
 ## 起動
 コンテナのビルドと起動:
 ```sh
@@ -170,3 +178,5 @@ docker compose restart jenkins
   - https://kinoshita-hidetoshi.github.io/Programing-Items/C++/etc/cppcheck.html
 - cppcheckおよびMISRA C++のDocker:
   - https://github.com/Facthunder/cppcheck.git
+- Vulkanのドキュメント(環境構築)
+  - https://docs.vulkan.org/tutorial/latest/02_Development_environment.html#_linux

@@ -1,0 +1,3 @@
+[submodule "cppcheck"]
+	path = cppcheck
+	url = https://github.com/Facthunder/cppcheck.git

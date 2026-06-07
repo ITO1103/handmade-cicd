@@ -19,7 +19,7 @@ pipeline {
 						-v "$HOST_WORKSPACE:/workspace" \
 						-w /workspace \
 						vulkan-builder:test0 \
-						sh -lc 'mkdir -p build shaders && slangc src/shader.slang -fvk-use-entrypoint-name -target spirv -o shaders/slang.spv && g++ -std=c++20 -Wall -Wextra -pedantic -I"$VULKAN_SDK/include" src/vulkan.cpp -o build/vulkan $(pkg-config --cflags --libs glfw3) -L"$VULKAN_SDK/lib" -lvulkan'
+						sh -lc 'mkdir -p build shaders && slangc -target spirv -o shaders/slang.spv src/shader.slang && g++ -std=c++20 -Wall -Wextra -pedantic -DGLFW_INCLUDE_NONE -DVULKAN_HPP_NO_STRUCT_CONSTRUCTORS -I"$VULKAN_SDK/include" src/vulkan.cpp -o build/vulkan $(pkg-config --cflags --libs glfw3) -L"$VULKAN_SDK/lib" -lvulkan'
 				'''
 			}
 		}

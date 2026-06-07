@@ -35,6 +35,32 @@ fi
 git -C "$repo_root" push --mirror local
 git -C "$remote_dir" symbolic-ref HEAD refs/heads/main || true
 
+# Jenkins の初期ジョブが参照するファイルが local remote に存在するか確認する
+required_paths=(
+  Jenkinsfile_hello
+  Jenkinsfile_warning
+  Jenkinsfile_error
+  Jenkinsfile_Vulkan
+  src/hello.cpp
+  src/memleak.cpp
+  src/overflow.cpp
+  src/shader.slang
+  src/vulkan.cpp
+)
+
+missing_paths=()
+for path in "${required_paths[@]}"; do
+  if ! git -C "$remote_dir" cat-file -e "refs/heads/main:${path}" 2>/dev/null; then
+    missing_paths+=("$path")
+  fi
+done
+
+if ((${#missing_paths[@]} > 0)); then
+  echo "Warning: local remote main does not contain files used by Jenkins jobs:" >&2
+  printf '  - %s\n' "${missing_paths[@]}" >&2
+  echo "Commit the missing files, then run this script again." >&2
+fi
+
 # Jenkins のビルドトリガー用の post-receive hook を配置
 cat > "$hook_file" <<'EOF'
 #!/usr/bin/env bash
@@ -76,7 +102,7 @@ while read -r oldrev newrev refname; do
       src/memleak.cpp|Jenkinsfile_error)
         trigger_cppcheck_error=true
         ;;
-      src/basecode.cpp|Jenkinsfile_Vulkan)
+      src/vulkan.cpp|src/shader.slang|Jenkinsfile_Vulkan)
         trigger_vulkan=true
         ;;
     esac
@@ -117,3 +143,4 @@ chmod +x "$hook_file"
 echo "Local remote ready: $remote_url"
 echo "Push future changes with: git push local main"
 echo "Jenkins trigger token stored at: $trigger_token_file"
+echo "If Jenkins is already running, restart it so init.groovy.d can create/update jobs."

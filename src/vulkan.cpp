@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <assert.h>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -99,10 +100,19 @@ class HelloTriangleApplication
 
 	void mainLoop()
 	{
+		// CI環境下で無限ループに陥らないように2秒後にウィンドウを閉じる
+		const bool ciMode    = std::getenv("CI") != nullptr;
+		const auto startedAt = std::chrono::steady_clock::now();
+
 		while (!glfwWindowShouldClose(window))
 		{
 			glfwPollEvents();
 			drawFrame();
+
+			if (ciMode && std::chrono::steady_clock::now() - startedAt >= std::chrono::seconds(2))
+			{
+				glfwSetWindowShouldClose(window, GLFW_TRUE);
+			}
 		}
 
 		device.waitIdle();

@@ -23,6 +23,41 @@ pipeline {
 				'''
 			}
 		}
+
+		stage('Execute') { // 実行 (Xvfbを使用して仮想ディスプレイ上で行い，スクリーンショットを保存)
+			steps {
+				sh '''
+					docker run --rm \
+						-e CI=true \
+						-e DISPLAY=:99 \
+						-v "$HOST_WORKSPACE:/workspace" \
+						-w /workspace \
+						vulkan-builder:test0 \
+						sh -lc '
+							set -e
+							rm -rf artifacts/vulkan
+							mkdir -p artifacts/vulkan
+
+							Xvfb :99 -screen 0 800x600x24 > artifacts/vulkan/xvfb.log 2>&1 &
+							xvfb_pid=$!
+							trap "kill $xvfb_pid 2>/dev/null || true" EXIT
+							sleep 1
+
+							./build/vulkan > artifacts/vulkan/run.log 2>&1 &
+							app_pid=$!
+							sleep 1
+
+							xwd -root -silent | convert xwd:- artifacts/vulkan/vulkan.png
+							wait $app_pid
+						'
+
+					rm -rf artifacts/vulkan
+					mkdir -p artifacts
+					cp -r /workspace/artifacts/vulkan artifacts/
+				'''
+				archiveArtifacts artifacts: 'artifacts/vulkan/*', allowEmptyArchive: false
+			}
+		}
 	}
 
 	post {

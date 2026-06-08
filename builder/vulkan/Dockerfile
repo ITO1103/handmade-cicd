@@ -15,7 +15,12 @@ RUN apt-get update && \
         libglm-dev \
         pkg-config \
         xz-utils \
-        ca-certificates && \
+        ca-certificates \
+        mesa-vulkan-drivers \
+        vulkan-tools \
+        xvfb \
+        x11-apps \
+        imagemagick && \
     rm -rf /var/lib/apt/lists/*
 
 # Vulkanの依存関係をチュートリアルからインストール

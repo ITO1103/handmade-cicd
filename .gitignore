@@ -1,4 +1,5 @@
 .DS_Store
+.env
 .local/
 build/
 artifacts/
@@ -10,3 +11,5 @@ gitlab/data/*
 !gitlab/config/.gitkeep
 !gitlab/logs/.gitkeep
 !gitlab/data/.gitkeep
+gitlab/ssl/*.key
+gitlab/ssl/*.crt

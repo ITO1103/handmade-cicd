@@ -3,3 +3,10 @@
 build/
 artifacts/
 shaders/
+
+gitlab/config/*
+gitlab/logs/*
+gitlab/data/*
+!gitlab/config/.gitkeep
+!gitlab/logs/.gitkeep
+!gitlab/data/.gitkeep

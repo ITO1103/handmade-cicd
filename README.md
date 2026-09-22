@@ -40,7 +40,7 @@ vulkanのビルドはaarch64環境では動作しないため注意．
 Windows(PowerShell)は今後対応予定．
 
 ### コンテナ
-主に4つのコンテナで構成される．
+主に5つのコンテナで構成される．
 
 #### Jenkins本体
 ```
@@ -192,6 +192,7 @@ bash scripts/setup-local-remote.sh
 docker compose up -d --build
 ```
 
+### Jenkins
 Jenkinsの管理画面URL:
 ```
 http://localhost:8080
@@ -212,6 +213,44 @@ docker compose restart jenkins
 `cpp-hello`はジョブの詳細画面から`Console Output`を確認し，`Hello, world!`と表示されているかを確認．
 `vulkan`はジョブの詳細画面から`Build Artifacts`を確認し，`artifacts/vulkan/vulkan.png`を開いて三角形が描画されているかを確認．
 
+### GitLab
+GitLabの管理画面URL:
+```
+http://localhost:8929
+```
+
+GitLabの実行時データは`gitlab/`配下に保存されるが，Git管理対象外としている．
+
+GitLabの初期管理者ユーザーは`root`．初期パスワードは以下で確認できる．
+```sh
+docker compose exec gitlab grep 'Password:' /etc/gitlab/initial_root_password
+```
+
+初期パスワードのファイルは，初回起動から24時間経過後のコンテナ再起動で削除される．確認後はGitLab上でパスワードを変更する．
+
+SSHでGitLabを使用する場合は，SSH公開鍵をGitLabに登録する．
+公開鍵がない場合は以下で作成する．
+```sh
+ssh-keygen -t ed25519
+```
+
+公開鍵を確認する．
+```sh
+cat ~/.ssh/id_ed25519.pub
+```
+
+GitLabのユーザーアイコンから`Edit profile` → `Access` → `SSH keys` → `Add new key`を開き，公開鍵を登録する．秘密鍵は登録しない．
+
+接続を確認する．
+```sh
+ssh -T -p 2424 git@localhost
+```
+
+cloneする．
+```sh
+git clone ssh://git@localhost:2424/iisec/test.git
+```
+
 ## 注意
 学習目的のためセキュリティが甘いです．
 特にJenkinsのコンテナにroot権限を与えているため，外部公開する環境ではこの構成をそのまま使わないでください．
@@ -225,6 +264,8 @@ docker compose restart jenkins
   - https://www.jenkins.io/doc/book/pipeline/
 - Jenkinsfileの書き方:
   - https://www.jenkins.io/doc/book/pipeline/jenkinsfile/
+- GitLab Dockerインストール（公式）:
+  - https://docs.gitlab.com/install/docker/installation/
 - 静的解析ツール cppcheckの導入，使用方法:
   - https://kinoshita-hidetoshi.github.io/Programing-Items/C++/etc/cppcheck.html
 - cppcheckおよびMISRA C++のDocker:

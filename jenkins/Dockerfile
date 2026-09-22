@@ -9,3 +9,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 USER jenkins
+
+# Jenkins起動前に必要なプラグインをインストール
+COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
+
+RUN jenkins-plugin-cli \
+    --plugin-file /usr/share/jenkins/ref/plugins.txt

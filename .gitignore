@@ -13,3 +13,6 @@ gitlab/data/*
 !gitlab/data/.gitkeep
 gitlab/ssl/*.key
 gitlab/ssl/*.crt
+
+gitlab-runner/config/*
+!gitlab-runner/config/.gitkeep

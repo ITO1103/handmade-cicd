@@ -28,15 +28,30 @@ services:
     environment:
       GITLAB_OMNIBUS_CONFIG: |
         external_url 'http://localhost:8929'
+        registry_external_url 'http://localhost:5050' # Container Registryの公開URL
         gitlab_rails['gitlab_shell_ssh_port'] = 2424
+        gitlab_rails['registry_enabled'] = true
     ports:
       - '8929:8929'
       - '2424:22'
+      - '5050:5050'
     volumes:
       - './gitlab/config:/etc/gitlab'
       - './gitlab/logs:/var/log/gitlab'
       - './gitlab/data:/var/opt/gitlab'
     shm_size: '256m'
+
+  # GitLab CIのRunner
+  gitlab-runner:
+    image: gitlab/gitlab-runner:alpine-v19.3.2
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - './gitlab-runner/config:/etc/gitlab-runner'
+      - './gitlab/runner-template.toml:/runner-template.toml:ro'
+      - '/var/run/docker.sock:/var/run/docker.sock'
+    profiles:
+      - gitlab-ci
 
   # C++ビルド用コンテナ
   cpp-builder:

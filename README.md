@@ -15,6 +15,9 @@ CI/CD の学習用レポジトリ．
 - 静的解析による検査 (MISRA C++？)
 - Windows containerへの対応 (移行)
 - 形式的検証の導入 (研究)
+- GitLabの導入
+- GitLab CIによるC++ビルド用イメージの作成
+- 作成したイメージをJenkinsのジョブで使用
 
 ## 完了
 - Jenkinsの構築
@@ -28,6 +31,12 @@ CI/CD の学習用レポジトリ．
 - Vulkanコードのビルド
 - Vulkanコードのheadless実行
 - Vulkanの描画結果をJenkins artifactとして保存
+- GitLabの導入
+
+GitLab CIの設定ファイルは作成済み．Pipelineでの実行確認はこれから行う．
+
+## 既知の問題
+- 初回起動時，同じコンテナを使用するジョブを二つ同時に実行するとイメージの作成に失敗する
 
 ## 構成
 可能な限り再現性を保つため，コンテナ上で動作するようにする．
@@ -198,12 +207,12 @@ Jenkinsの管理画面URL:
 http://localhost:8080
 ```
 
-※Jenkinsの初期パスワードはランダムに生成されるので，以下のコマンドにて確認する．
+<!-- ※Jenkinsの初期パスワードはランダムに生成されるので，以下のコマンドにて確認する．
 ```sh
 docker compose exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
-```
+``` -->
 
-起動し管理者アカウントを作成後，`cpp-hello`，`cppcheck-warning`，`cppcheck-error`，`vulkan`という名前のジョブが作成されているので，緑色の再生ボタンを押してジョブを実行．
+起動<!--し管理者アカウントを作成-->後，`cpp-hello`，`cppcheck-warning`，`cppcheck-error`，`vulkan`という名前のジョブが作成されているので，緑色の再生ボタンを押してジョブを実行．
 
 ※Jenkins起動後にローカルリモートを作り直した場合は，Jenkinsを再起動する．
 ```sh
@@ -218,6 +227,9 @@ GitLabの管理画面URL:
 ```
 http://localhost:8929
 ```
+>※GitLab自体が複雑なので起動は遅いです．環境にもよりますが5分程度かかります．
+
+Container Registryは`http://localhost:5050`で公開する．
 
 GitLabの実行時データは`gitlab/`配下に保存されるが，Git管理対象外としている．
 
@@ -227,6 +239,8 @@ docker compose exec gitlab grep 'Password:' /etc/gitlab/initial_root_password
 ```
 
 初期パスワードのファイルは，初回起動から24時間経過後のコンテナ再起動で削除される．確認後はGitLab上でパスワードを変更する．
+
+その後のプロジェクト作成画面はスキップして良い．
 
 SSHでGitLabを使用する場合は，SSH公開鍵をGitLabに登録する．
 公開鍵がない場合は以下で作成する．
@@ -241,15 +255,40 @@ cat ~/.ssh/id_ed25519.pub
 
 GitLabのユーザーアイコンから`Edit profile` → `Access` → `SSH keys` → `Add new key`を開き，公開鍵を登録する．秘密鍵は登録しない．
 
-接続を確認する．
+#### C++用ビルドイメージ
+
+まずGitLabに`root`でログインし，`Create new` → `New project/repository` → `Create blank project`を開く．名前とパスを`cpp-builder-image`，公開範囲を`Public`にする．`Initialize repository with a README`を選ぶと`main`ブランチができ，すぐにcloneできる．`Settings` → `General`でContainer Registryが有効なことも確認する．
+
+`Settings` → `Repository`で`main`が保護されているか確認する．pushの許可はMaintainerだけなのも確認する．続けて`Settings` → `CI/CD` → `Runners`からProject Runnerを作る．タグは`docker`，保護ブランチ専用にし，タグなしジョブの実行は無効にする．作成直後の登録画面に表示されるRunner認証トークン（`glrt-...`）を使い，Runnerを登録する．画面を閉じた場合は，作成したRunnerの`Register`画面を開く．
+
+Runnerの詳細画面が404になる場合は，ログイン時と同じホスト名で開いているか確認する．IPアドレスでログインした場合は，登録画面のURLもそのIPアドレスにする．
+
+以下のコマンドは，このリポジトリのルートで実行する．`/runner-template.toml`はRunnerコンテナ内のパス．
+
 ```sh
-ssh -T -p 2424 git@localhost
+docker compose --profile gitlab-ci run --rm gitlab-runner register \
+  --url http://localhost:8929 \
+  --executor docker \
+  --docker-image docker:27.5.1-cli \
+  --docker-pull-policy if-not-present \
+  --template-config /runner-template.toml
+docker compose --profile gitlab-ci up -d gitlab-runner
 ```
 
-cloneする．
+登録中にトークンを聞かれたら，画面に表示されたものを入力する．
+
+次にGitLabのプロジェクトをcloneし，`gitlab/projects/cpp-builder-image`に置いた設定例をコピーしてpushする．コピー後はGitLab側のリポジトリで編集する．以下はこのリポジトリのルートから実行する例．先にSSH公開鍵をGitLabへ登録しておく．
+
 ```sh
-git clone ssh://git@localhost:2424/iisec/test.git
+ssh -T -p 2424 git@localhost
+git clone ssh://git@localhost:2424/root/cpp-builder-image.git ../cpp-builder-image
+cp -a gitlab/projects/cpp-builder-image/. ../cpp-builder-image/
+git -C ../cpp-builder-image add -A
+git -C ../cpp-builder-image commit -m "Add C++ builder image"
+git -C ../cpp-builder-image push origin main
 ```
+
+pushするとGitLab CIがDockerfileからイメージを作り，Container Registryへ保存する．結果は`Build` → `Pipelines`で確認する．RunnerはホストのDocker daemonを操作できるため，このプロジェクト専用で使う．
 
 ## 注意
 学習目的のためセキュリティが甘いです．

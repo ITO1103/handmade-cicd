@@ -1,0 +1,24 @@
+stages:
+  - build
+
+variables:
+  # attestationを無効にする
+  BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
+  IMAGE_TAG: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" # コミットごとに別のタグを付ける
+
+build-cpp-builder:
+  stage: build
+  image: docker:27.5.1-cli
+  tags:
+    - docker
+  before_script: # Docker daemonへの接続とRegistryへのログイン
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
+  script: # イメージをビルドしてRegistryへpushする
+    - docker build --pull --tag "$IMAGE_TAG" .
+    - docker push "$IMAGE_TAG"
+    - | # mainへのpushではlatestタグも更新する
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker tag "$IMAGE_TAG" "$CI_REGISTRY_IMAGE:latest"
+        docker push "$CI_REGISTRY_IMAGE:latest"
+      fi

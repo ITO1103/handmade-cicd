@@ -34,6 +34,7 @@ CI/CD の学習用レポジトリ．
 - GitLabの導入
 - GitLab CIでC++ビルド用とcppcheck用のイメージを作成し，Container Registryへ保存
 - JenkinsのC++ジョブでContainer Registryに保存されたイメージを使用
+- GitLab CIでVulkan用イメージを作成し，JenkinsのVulkanジョブで使用
 
 ## 既知の問題
 - 初回起動時，同じコンテナを使用するジョブを二つ同時に実行するとイメージの作成に失敗する
@@ -57,7 +58,7 @@ GitLab CE
   - Web UI : 8929番
   - Git over SSH : 2424番
   - Container Registry : 5050番
-  - C++ビルド用とcppcheck用のイメージを保存
+  - C++ビルド用，cppcheck用，Vulkan用のイメージを保存
 ```
 
 GitLabの実行時データは`gitlab/`配下に保存する．Git管理対象外としている．
@@ -67,7 +68,7 @@ GitLabの実行時データは`gitlab/`配下に保存する．Git管理対象�
 GitLab Runner
   - Project Runner
   - Docker executor
-  - GitLab CIでC++ビルド用とcppcheck用のイメージを作成し，Registryへpush
+  - GitLab CIでC++ビルド用，cppcheck用，Vulkan用のイメージを作成し，Registryへpush
 ```
 
 RunnerはホストのDocker socketを使う．Runner本体とCIのジョブはhost networkingでGitLabとRegistryへ接続する．
@@ -101,7 +102,8 @@ C++ builder
 #### Vulkanコードのビルド・実行用環境
 ```
 Vulkan builder
-  - ubuntu:24.04
+  - localhost:5050/root/cpp-builder-image/vulkan:latest
+  - ubuntu:24.04をベースにGitLab CIで作成
   - Vulkan SDK
   - GLFW
   - Slang
@@ -188,7 +190,7 @@ cppcheckによる静的解析をビルド前に行う．
 warningはUNSTABLE，errorはビルド失敗とする．
 
 ### Vulkan
-`builder/vulkan/Dockerfile`でVulkan SDK入りのビルド・実行用イメージを作り，`Jenkinsfile_Vulkan`で `src/vulkan.cpp` をコンパイルする．
+GitLab CIでVulkan用イメージを作り，Container Registryへ保存する．`Jenkinsfile_Vulkan`はそのイメージをpullして`src/vulkan.cpp`をコンパイルする．
 ビルド用コンテナでは `VULKAN_SDK=/opt/vulkansdk/default` を使う．
 ビルド前に `src/shader.slang` を `slangc` で `shaders/slang.spv` に変換してから，`src/vulkan.cpp` をコンパイルする．
 リンク時は `-L"$VULKAN_SDK/lib"` を付けて `libvulkan.so` を見つけるようにしている．
@@ -205,7 +207,7 @@ artifacts/vulkan/xvfb.log
 ```
 
 Jenkinsのビルド結果画面の`Build Artifacts`から`artifacts/vulkan/vulkan.png`を開くと，描画結果を確認できる．
-Apple Silicon 環境では Vulkan ジョブの `Prepare Vulkan Builder` だけ `DOCKER_DEFAULT_PLATFORM=linux/amd64` と `DOCKER_BUILDKIT=0` を付けて amd64 版イメージを作る．
+Vulkan SDKがx86_64版なので，GitLab CIでは`linux/amd64`のイメージを作る．Jenkinsでもpullと実行時に`--platform=linux/amd64`を指定する．
 
 ## 構築
 以下はリポジトリのルートで実行する．
@@ -318,9 +320,9 @@ git -C ../cpp-builder-image commit -m "Add C++ builder image"
 git -C ../cpp-builder-image push origin main
 ```
 
-GitLabの`Build` → `Pipelines`でパイプラインの結果を確認する．成功するとContainer Registryにイメージが保存される．各イメージにはコミットごとの短縮SHAをtagとして付ける．mainへのpushでは`latest`も更新し，Jenkinsはこの`latest`を使う．cppcheck用イメージは，`cppcheck/Dockerfile`か`.gitlab-ci.yml`を変更した場合に作る．
+GitLabの`Build` → `Pipelines`でパイプラインの結果を確認する．成功するとContainer Registryにイメージが保存される．各イメージにはコミットごとの短縮SHAをtagとして付ける．mainへのpushでは`latest`も更新し，Jenkinsはこの`latest`を使う．cppcheck用とVulkan用のイメージは，それぞれのDockerfileか`.gitlab-ci.yml`を変更した場合に作る．
 
-`.gitlab-ci.yml`とDockerfileは`gitlab/projects/cpp-builder-image`に置いてある．cppcheck用Dockerfileは`gitlab/projects/cpp-builder-image/cppcheck/Dockerfile`に置く．GitLab側のプロジェクトで変更する場合は，コピーした先で編集する．
+`.gitlab-ci.yml`とDockerfileは`gitlab/projects/cpp-builder-image`に置いてある．cppcheck用とVulkan用のDockerfileはそれぞれ`gitlab/projects/cpp-builder-image/cppcheck/Dockerfile`，`gitlab/projects/cpp-builder-image/vulkan/Dockerfile`に置く．GitLab側のプロジェクトで変更する場合は，コピーした先で編集する．
 
 ### 6. Jenkinsを起動する
 ローカルbareレポジトリを作成し，コミット済みのJenkinsfileやsrc配下のファイルを反映する．

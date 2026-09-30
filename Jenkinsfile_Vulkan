@@ -1,6 +1,10 @@
 pipeline {
 	agent any
 
+	environment {
+		VULKAN_BUILDER_IMAGE = 'localhost:5050/root/cpp-builder-image/vulkan:latest'
+	}
+
 	options {
 		disableConcurrentBuilds()
 	}
@@ -8,17 +12,17 @@ pipeline {
 	stages {
 		stage('Prepare Vulkan Builder') {
 			steps {
-				sh 'DOCKER_DEFAULT_PLATFORM=linux/amd64 DOCKER_BUILDKIT=0 docker build -t vulkan-builder:test0 /workspace/builder/vulkan'
+				sh 'docker pull --platform=linux/amd64 "$VULKAN_BUILDER_IMAGE"'
 			}
 		}
 
 		stage('Build') {
 			steps {
 				sh '''
-					docker run --rm \
+					docker run --rm --platform=linux/amd64 \
 						-v "$HOST_WORKSPACE:/workspace" \
 						-w /workspace \
-						vulkan-builder:test0 \
+						"$VULKAN_BUILDER_IMAGE" \
 						sh -lc 'mkdir -p build shaders && slangc -target spirv -o shaders/slang.spv src/shader.slang && g++ -std=c++20 -Wall -Wextra -pedantic -DGLFW_INCLUDE_NONE -DVULKAN_HPP_NO_STRUCT_CONSTRUCTORS -I"$VULKAN_SDK/include" src/vulkan.cpp -o build/vulkan $(pkg-config --cflags --libs glfw3) -L"$VULKAN_SDK/lib" -lvulkan'
 				'''
 			}
@@ -27,12 +31,12 @@ pipeline {
 		stage('Execute') { // 実行 (Xvfbを使用して仮想ディスプレイ上で行い，スクリーンショットを保存)
 			steps {
 				sh '''
-					docker run --rm \
+					docker run --rm --platform=linux/amd64 \
 						-e CI=true \
 						-e DISPLAY=:99 \
 						-v "$HOST_WORKSPACE:/workspace" \
 						-w /workspace \
-						vulkan-builder:test0 \
+						"$VULKAN_BUILDER_IMAGE" \
 						sh -lc '
 							set -e
 							rm -rf artifacts/vulkan
@@ -62,7 +66,7 @@ pipeline {
 
 	post {
 		always {
-			sh 'docker run --rm -v "$HOST_WORKSPACE:/workspace" -w /workspace vulkan-builder:test0 rm -rf build shaders'
+			sh 'docker run --rm --platform=linux/amd64 -v "$HOST_WORKSPACE:/workspace" -w /workspace "$VULKAN_BUILDER_IMAGE" rm -rf build shaders'
 		}
 	}
 }

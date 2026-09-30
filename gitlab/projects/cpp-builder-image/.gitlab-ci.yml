@@ -1,0 +1,74 @@
+stages:
+  - build
+
+variables:
+  # attestationを無効にする
+  BUILDX_NO_DEFAULT_ATTESTATIONS: "1"
+  # ジョブとホストのDocker daemonからHTTPのRegistryへ接続する．
+  # この環境ではホストのIPアドレスがHTTP Registryとして登録されていないため，localhostを使う．
+  REGISTRY_LOCAL: "localhost:5050"
+
+build-cpp-builder:
+  stage: build
+  image: docker:27.5.1-cli
+  tags:
+    - docker
+  before_script: # Docker daemonへの接続とRegistryへのログイン
+    - docker info
+    - export IMAGE_NAME="$REGISTRY_LOCAL/$CI_PROJECT_PATH"
+    - export IMAGE_TAG="$IMAGE_NAME:$CI_COMMIT_SHORT_SHA" # コミットごとに別のタグを付ける
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$REGISTRY_LOCAL" --username "$CI_REGISTRY_USER" --password-stdin
+  script: # イメージをビルドしてRegistryへpushする
+    - docker build --pull --tag "$IMAGE_TAG" .
+    - docker push "$IMAGE_TAG"
+    - | # mainへのpushではlatestタグも更新する
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker tag "$IMAGE_TAG" "$IMAGE_NAME:latest"
+        docker push "$IMAGE_NAME:latest"
+      fi
+
+build-cppcheck:
+  stage: build
+  image: docker:27.5.1-cli
+  tags:
+    - docker
+  before_script: # Docker daemonへの接続とRegistryへのログイン
+    - docker info
+    - export IMAGE_NAME="$REGISTRY_LOCAL/$CI_PROJECT_PATH/cppcheck"
+    - export IMAGE_TAG="$IMAGE_NAME:$CI_COMMIT_SHORT_SHA" # コミットごとに別のタグを付ける
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$REGISTRY_LOCAL" --username "$CI_REGISTRY_USER" --password-stdin
+  script: # cppcheckイメージをビルドしてRegistryへpushする
+    - docker build --pull --tag "$IMAGE_TAG" ./cppcheck
+    - docker push "$IMAGE_TAG"
+    - | # mainへのpushではlatestタグも更新する
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker tag "$IMAGE_TAG" "$IMAGE_NAME:latest"
+        docker push "$IMAGE_NAME:latest"
+      fi
+  rules:
+    - changes:
+        - .gitlab-ci.yml
+        - cppcheck/Dockerfile
+
+build-vulkan:
+  stage: build
+  image: docker:27.5.1-cli
+  tags:
+    - docker
+  before_script: # Docker daemonへの接続とRegistryへのログイン
+    - docker info
+    - export IMAGE_NAME="$REGISTRY_LOCAL/$CI_PROJECT_PATH/vulkan"
+    - export IMAGE_TAG="$IMAGE_NAME:$CI_COMMIT_SHORT_SHA" # コミットごとに別のタグを付ける
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$REGISTRY_LOCAL" --username "$CI_REGISTRY_USER" --password-stdin
+  script: # amd64版VulkanイメージをビルドしてRegistryへpushする
+    - docker build --pull --platform=linux/amd64 --tag "$IMAGE_TAG" ./vulkan
+    - docker push "$IMAGE_TAG"
+    - | # mainへのpushではlatestタグも更新する
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker tag "$IMAGE_TAG" "$IMAGE_NAME:latest"
+        docker push "$IMAGE_NAME:latest"
+      fi
+  rules:
+    - changes:
+        - .gitlab-ci.yml
+        - vulkan/Dockerfile

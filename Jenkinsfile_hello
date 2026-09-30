@@ -1,15 +1,20 @@
 pipeline {
     agent any
 
+    environment { // GitLab CIで作ったイメージを使う
+        CPP_BUILDER_IMAGE = 'localhost:5050/root/cpp-builder-image:latest'
+        CPPCHECK_IMAGE = 'localhost:5050/root/cpp-builder-image/cppcheck:latest'
+    }
+
     // ビルドの同時実行を禁止する (今回は同時に複数ビルドを行わないため発生しないが，ローカルリポジトリを複数ビルドが同時に触ると競合する可能性があるためそれを禁止する)
     // options {
     //     disableConcurrentBuilds()
     // }
 
     stages {
-        stage('Prepare CppCheck') { // C++静的解析(cppcheck)用のDockerイメージを作成
+        stage('Prepare CppCheck') { // Registryからcppcheck用イメージをpull
             steps {
-                sh 'docker build -t cppcheck:test0 /workspace/cppcheck'
+                sh 'docker pull "$CPPCHECK_IMAGE"'
             }
         }
 
@@ -19,7 +24,7 @@ pipeline {
                     def output = sh(script: '''
                      docker run --rm -v "$HOST_WORKSPACE:/workspace" \
                         -w /workspace \
-                        cppcheck:test0 \
+                        "$CPPCHECK_IMAGE" \
                         cppcheck --enable=all \
                         src/hello.cpp 2>&1
                     ''', returnStdout: true).trim()
@@ -36,19 +41,19 @@ pipeline {
             }
         }
 
-        stage('Prepare Builder') { // C++ビルド用のDockerイメージを作成
+        stage('Prepare Builder') { // RegistryからC++ビルド用イメージをpull
             steps {
-                sh 'docker build -t cpp-builder:test0 /workspace/builder/cpp'
+                sh 'docker pull "$CPP_BUILDER_IMAGE"'
             }
         }
 
         stage('Build') { // C++をビルド用コンテナでビルド
             steps {
                 sh '''
-                    docker run --rm\
+                    docker run --rm \
                         -v "$HOST_WORKSPACE:/workspace" \
                         -w /workspace \
-                        cpp-builder:test0 \
+                        "$CPP_BUILDER_IMAGE" \
                         sh -lc 'mkdir -p build && g++ -std=c++20 -Wall -Wextra -pedantic src/hello.cpp -o build/hello'
                 '''
             }
@@ -60,7 +65,7 @@ pipeline {
                         printf '0\n0\n' | docker run --rm -i \
                             -v "$HOST_WORKSPACE:/workspace" \
                             -w /workspace \
-                            cpp-builder:test0 \
+                            "$CPP_BUILDER_IMAGE" \
                             sh -lc './build/hello'
                     '''
                 }
@@ -73,7 +78,7 @@ pipeline {
                         printf '0\n0\n' | docker run --rm -i \
                             -v "$HOST_WORKSPACE:/workspace" \
                             -w /workspace \
-                            cpp-builder:test0 \
+                            "$CPP_BUILDER_IMAGE" \
                             sh -lc './build/hello'
                     ''', returnStdout: true).trim()
                     echo "Output: ${output}" // 出力を表示させる
@@ -90,7 +95,7 @@ pipeline {
                         printf '3\n5\n' | docker run --rm -i \
                             -v "$HOST_WORKSPACE:/workspace" \
                             -w /workspace \
-                            cpp-builder:test0 \
+                            "$CPP_BUILDER_IMAGE" \
                             sh -lc './build/hello'
                     ''', returnStdout: true).trim()
                     echo "Output: ${output}" // 出力を表示
@@ -105,7 +110,7 @@ pipeline {
 
     post {
         always { // ビルド後にクリーンアップ
-            sh 'docker run --rm -v "$HOST_WORKSPACE:/workspace" -w /workspace cpp-builder:test0 rm -rf build'
+            sh 'docker run --rm -v "$HOST_WORKSPACE:/workspace" -w /workspace "$CPP_BUILDER_IMAGE" rm -rf build'
         }
     }
 }

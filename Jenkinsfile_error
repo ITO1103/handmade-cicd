@@ -1,15 +1,19 @@
 pipeline {
     agent any
 
+    environment {
+        CPPCHECK_IMAGE = 'localhost:5050/root/cpp-builder-image/cppcheck:latest'
+    }
+
     // ビルドの同時実行を禁止する (今回は同時に複数ビルドを行わないため発生しないが，ローカルリポジトリを複数ビルドが同時に触ると競合する可能性があるためそれを禁止する)
     // options {
     //     disableConcurrentBuilds()
     // }
 
     stages {
-        stage('Prepare CppCheck') { // C++静的解析(cppcheck)用のDockerイメージを作成
+        stage('Prepare CppCheck') { // Registryからcppcheck用イメージをpull
             steps {
-                sh 'docker build -t cppcheck:test0 /workspace/cppcheck'
+                sh 'docker pull "$CPPCHECK_IMAGE"'
             }
         }
 
@@ -19,7 +23,7 @@ pipeline {
                     def output = sh(script: '''
                      docker run --rm -v "$HOST_WORKSPACE:/workspace" \
                         -w /workspace \
-                        cppcheck:test0 \
+                        "$CPPCHECK_IMAGE" \
                         cppcheck --enable=all \
                         src/memleak.cpp 2>&1
                     ''', returnStdout: true).trim()

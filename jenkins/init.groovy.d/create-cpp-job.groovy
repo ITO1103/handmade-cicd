@@ -3,6 +3,8 @@ import jenkins.model.Jenkins
 import hudson.plugins.git.BranchSpec
 import hudson.plugins.git.GitSCM
 import hudson.plugins.git.UserRemoteConfig
+import hudson.plugins.git.extensions.impl.PathRestriction
+import hudson.triggers.SCMTrigger
 import hudson.security.AuthorizationStrategy
 import org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition
 import org.jenkinsci.plugins.workflow.job.WorkflowJob
@@ -19,18 +21,41 @@ def jobName = 'cpp-hello'
 def warning_jobName = 'cppcheck-warning'
 def error_jobName = 'cppcheck-error'
 def vulkan_jobName = 'vulkan'
-def repoUrl = System.getenv('LOCAL_GIT_REPO_URL') ?: 'file:///workspace/.local/git/handmade-cicd.git' // ローカルリポジトリのURLを取得，無ければ手動で指定されたURLを使用 (どのみち.local/git/handmade-cicd.gitを指すはず)
-def branchSpec = System.getenv('LOCAL_GIT_BRANCH') ?: '*/main' // ブランチ指定を取得
-def triggerTokenFile = new File('/workspace/.local/jenkins-trigger-token') // トリガートークンをファイルから取得するためのFileオブジェクト (存在しない場合は後でデフォルト値を使用)
-def triggerToken = System.getenv('LOCAL_GIT_TRIGGER_TOKEN') ?: (triggerTokenFile.exists() ? triggerTokenFile.text.trim() : 'handmade-cicd-local-trigger') // トリガートークンを環境変数から取得，無ければファイルから取得，それもなければデフォルト値を使用
+def repoUrl = System.getenv('GITLAB_REPO_URL') ?: 'http://gitlab:8929/root/handmade-cicd.git' // GitLabのリポジトリURLを取得，無ければ同じcompose内のGitLabを使用
+def branchSpec = '*/main' // とりあえずmainブランチを使用
 
-// GitSCMの設定を作成する (ローカルリポジトリからJenkinsfileを読み込むための設定)
+// GitSCMの設定を作成する (GitLabからJenkinsfileを読み込むための設定)
+// PathRestrictionで変更されたファイルを確認する (正規表現で指定)
 def scm = new GitSCM(
     [new UserRemoteConfig(repoUrl, null, null, null)],
     [new BranchSpec(branchSpec)],
     null,
     null,
-    []
+    [new PathRestriction('src/hello\\.cpp\nJenkinsfile\nJenkinsfile_hello', '')]
+)
+
+def warningScm = new GitSCM(
+    [new UserRemoteConfig(repoUrl, null, null, null)],
+    [new BranchSpec(branchSpec)],
+    null,
+    null,
+    [new PathRestriction('src/overflow\\.cpp\nJenkinsfile_warning', '')]
+)
+
+def errorScm = new GitSCM(
+    [new UserRemoteConfig(repoUrl, null, null, null)],
+    [new BranchSpec(branchSpec)],
+    null,
+    null,
+    [new PathRestriction('src/memleak\\.cpp\nJenkinsfile_error', '')]
+)
+
+def vulkanScm = new GitSCM(
+    [new UserRemoteConfig(repoUrl, null, null, null)],
+    [new BranchSpec(branchSpec)],
+    null,
+    null,
+    [new PathRestriction('src/vulkan\\.cpp\nsrc/shader\\.slang\nJenkinsfile_Vulkan', '')]
 )
 
 // ジョブが存在しない場合は新規作成、存在する場合は上書き
@@ -54,34 +79,31 @@ if (vulkanJob == null) {
     vulkanJob = jenkins.createProject(WorkflowJob, vulkan_jobName)
 }
 
-// ジョブにビルドトリガー用の認証トークンを設定する (ローカルリポジトリからのビルドトリガーで使用するため)
-def authTokenField = WorkflowJob.getDeclaredField('authToken')
-authTokenField.accessible = true
-authTokenField.set(job, new hudson.model.BuildAuthorizationToken(triggerToken))
-authTokenField.set(warningJob, new hudson.model.BuildAuthorizationToken(triggerToken))
-authTokenField.set(errorJob, new hudson.model.BuildAuthorizationToken(triggerToken))
-authTokenField.set(vulkanJob, new hudson.model.BuildAuthorizationToken(triggerToken))
-
-// local bare repo から Jenkinsfile を読み込むように設定する
+// GitLabからJenkinsfileを読み込むように設定する
+// Poll SCMはスケジュールを空にし，Webhookを受けた時に変更を確認する
 def definition = new CpsScmFlowDefinition(scm, 'Jenkinsfile_hello')
 definition.setLightweight(true)
 job.setDefinition(definition)
+job.addTrigger(new SCMTrigger(''))
 job.save()
 
-def warningDefinition = new CpsScmFlowDefinition(scm, 'Jenkinsfile_warning')
+def warningDefinition = new CpsScmFlowDefinition(warningScm, 'Jenkinsfile_warning')
 warningDefinition.setLightweight(true)
 warningJob.setDefinition(warningDefinition)
+warningJob.addTrigger(new SCMTrigger(''))
 warningJob.save()
 
-def errorDefinition = new CpsScmFlowDefinition(scm, 'Jenkinsfile_error')
+def errorDefinition = new CpsScmFlowDefinition(errorScm, 'Jenkinsfile_error')
 errorDefinition.setLightweight(true)
 errorJob.setDefinition(errorDefinition)
+errorJob.addTrigger(new SCMTrigger(''))
 errorJob.save()
 
-def vulkanDefinition = new CpsScmFlowDefinition(scm, 'Jenkinsfile_Vulkan')
+def vulkanDefinition = new CpsScmFlowDefinition(vulkanScm, 'Jenkinsfile_Vulkan')
 vulkanDefinition.setLightweight(true)
 vulkanJob.setDefinition(vulkanDefinition)
+vulkanJob.addTrigger(new SCMTrigger(''))
 vulkanJob.save()
 
 // デバッグ用ログ
-//println "Configured Jenkins pipeline job: ${jobName} from ${repoUrl} (${branchSpec}), token from ${triggerTokenFile}"
+//println "Configured Jenkins pipeline job: ${jobName} from ${repoUrl} (${branchSpec})"

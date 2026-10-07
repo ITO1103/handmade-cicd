@@ -20,8 +20,8 @@ pipeline {
 			steps {
 				sh '''
 					docker run --rm --platform=linux/amd64 \
-						-v "$HOST_WORKSPACE:/workspace" \
-						-w /workspace \
+						--volumes-from jenkins-test \
+						-w "$WORKSPACE" \
 						"$VULKAN_BUILDER_IMAGE" \
 						sh -lc 'mkdir -p build shaders && slangc -target spirv -o shaders/slang.spv src/shader.slang && g++ -std=c++20 -Wall -Wextra -pedantic -DGLFW_INCLUDE_NONE -DVULKAN_HPP_NO_STRUCT_CONSTRUCTORS -I"$VULKAN_SDK/include" src/vulkan.cpp -o build/vulkan $(pkg-config --cflags --libs glfw3) -L"$VULKAN_SDK/lib" -lvulkan'
 				'''
@@ -34,8 +34,8 @@ pipeline {
 					docker run --rm --platform=linux/amd64 \
 						-e CI=true \
 						-e DISPLAY=:99 \
-						-v "$HOST_WORKSPACE:/workspace" \
-						-w /workspace \
+						--volumes-from jenkins-test \
+						-w "$WORKSPACE" \
 						"$VULKAN_BUILDER_IMAGE" \
 						sh -lc '
 							set -e
@@ -55,9 +55,6 @@ pipeline {
 							wait $app_pid
 						'
 
-					rm -rf artifacts/vulkan
-					mkdir -p artifacts
-					cp -r /workspace/artifacts/vulkan artifacts/
 				'''
 				archiveArtifacts artifacts: 'artifacts/vulkan/*', allowEmptyArchive: false
 			}
@@ -66,7 +63,7 @@ pipeline {
 
 	post {
 		always {
-			sh 'docker run --rm --platform=linux/amd64 -v "$HOST_WORKSPACE:/workspace" -w /workspace "$VULKAN_BUILDER_IMAGE" rm -rf build shaders'
+			sh 'docker run --rm --platform=linux/amd64 --volumes-from jenkins-test -w "$WORKSPACE" "$VULKAN_BUILDER_IMAGE" rm -rf build shaders'
 		}
 	}
 }

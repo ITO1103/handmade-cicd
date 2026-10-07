@@ -2,13 +2,13 @@ pipeline {
     agent any
 
     environment {
+        CPP_BUILDER_IMAGE = 'localhost:5050/root/cpp-builder-image:latest'
         CPPCHECK_IMAGE = 'localhost:5050/root/cpp-builder-image/cppcheck:latest'
     }
 
-    // ビルドの同時実行を禁止する (今回は同時に複数ビルドを行わないため発生しないが，ローカルリポジトリを複数ビルドが同時に触ると競合する可能性があるためそれを禁止する)
-    // options {
-    //     disableConcurrentBuilds()
-    // }
+    options {
+        disableConcurrentBuilds() // 同じジョブを同時に実行しない
+    }
 
     stages {
         stage('Prepare CppCheck') { // Registryからcppcheck用イメージをpull
@@ -21,8 +21,8 @@ pipeline {
             steps {
                 script {
                     def output = sh(script: '''
-                     docker run --rm -v "$HOST_WORKSPACE:/workspace" \
-                        -w /workspace \
+                     docker run --rm --volumes-from jenkins-test \
+                        -w "$WORKSPACE" \
                         "$CPPCHECK_IMAGE" \
                         cppcheck --enable=all \
                         src/overflow.cpp 2>&1
@@ -44,8 +44,8 @@ pipeline {
             steps {
                 script {
                     def output = sh(script: '''
-                     docker run --rm -v "$HOST_WORKSPACE:/workspace" \
-                        -w /workspace \
+                     docker run --rm --volumes-from jenkins-test \
+                        -w "$WORKSPACE" \
                         "$CPPCHECK_IMAGE" \
                         cppcheck --enable=all \
                         src/memleak.cpp 2>&1
@@ -62,9 +62,9 @@ pipeline {
             }
         }
 
-        stage('Prepare Builder') { // C++ビルド用のDockerイメージを作成
+        stage('Prepare Builder') { // RegistryからC++ビルド用イメージをpull
             steps {
-                sh 'docker build -t cpp-builder:test0 /workspace/builder/cpp'
+                sh 'docker pull "$CPP_BUILDER_IMAGE"'
             }
         }
 
@@ -72,9 +72,9 @@ pipeline {
             steps {
                 sh '''
                     docker run --rm\
-                        -v "$HOST_WORKSPACE:/workspace" \
-                        -w /workspace \
-                        cpp-builder:test0 \
+                        --volumes-from jenkins-test \
+                        -w "$WORKSPACE" \
+                        "$CPP_BUILDER_IMAGE" \
                         sh -lc 'mkdir -p build && g++ -std=c++20 -Wall -Wextra -pedantic src/hello.cpp -o build/hello'
                 '''
             }
@@ -84,9 +84,9 @@ pipeline {
                 timeout(time: 30, unit: 'SECONDS') { // 念の為タイムアウト (対話のやつを入れてしまった場合，無限に入力待ちで終わらない可能性があるので) // 入力はとりあえず0を入れておく(入れないと入力待ちでタイムアウトになる)
                     sh '''
                         printf '0\n0\n' | docker run --rm -i \
-                            -v "$HOST_WORKSPACE:/workspace" \
-                            -w /workspace \
-                            cpp-builder:test0 \
+                            --volumes-from jenkins-test \
+                            -w "$WORKSPACE" \
+                            "$CPP_BUILDER_IMAGE" \
                             sh -lc './build/hello'
                     '''
                 }
@@ -97,9 +97,9 @@ pipeline {
                 script { 
                     def output = sh(script: '''
                         printf '0\n0\n' | docker run --rm -i \
-                            -v "$HOST_WORKSPACE:/workspace" \
-                            -w /workspace \
-                            cpp-builder:test0 \
+                            --volumes-from jenkins-test \
+                            -w "$WORKSPACE" \
+                            "$CPP_BUILDER_IMAGE" \
                             sh -lc './build/hello'
                     ''', returnStdout: true).trim()
                     echo "Output: ${output}" // 出力を表示させる
@@ -114,9 +114,9 @@ pipeline {
                 script { // echoでは入力を渡せなかったのでprintfで入力を渡す
                     def output = sh(script: '''
                         printf '3\n5\n' | docker run --rm -i \
-                            -v "$HOST_WORKSPACE:/workspace" \
-                            -w /workspace \
-                            cpp-builder:test0 \
+                            --volumes-from jenkins-test \
+                            -w "$WORKSPACE" \
+                            "$CPP_BUILDER_IMAGE" \
                             sh -lc './build/hello'
                     ''', returnStdout: true).trim()
                     echo "Output: ${output}" // 出力を表示
@@ -131,7 +131,7 @@ pipeline {
 
     post {
         always { // ビルド後にクリーンアップ
-            sh 'docker run --rm -v "$HOST_WORKSPACE:/workspace" -w /workspace cpp-builder:test0 rm -rf build'
+            sh 'docker run --rm --volumes-from jenkins-test -w "$WORKSPACE" "$CPP_BUILDER_IMAGE" rm -rf build'
         }
     }
 }

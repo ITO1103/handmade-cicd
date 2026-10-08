@@ -5,7 +5,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         docker-cli \
         git \
-    && git config --system --add safe.directory /workspace/.local/git/handmade-cicd.git \
     && rm -rf /var/lib/apt/lists/*
 
 USER jenkins

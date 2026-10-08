@@ -10,7 +10,7 @@ CI/CD の学習用レポジトリ．
 - GroovyによるJenkinsジョブの構築
 - 簡単なC++コードのビルド
 - 簡単なVulkanコードのビルド
-- ローカルGit Pushによるビルドの自動化
+- GitLabへのPushによるビルドの自動化
 - テストの自動化
 - 静的解析による検査 (MISRA C++？)
 - Windows containerへの対応 (移行)
@@ -35,9 +35,7 @@ CI/CD の学習用レポジトリ．
 - GitLab CIでC++ビルド用とcppcheck用のイメージを作成し，Container Registryへ保存
 - JenkinsのC++ジョブでContainer Registryに保存されたイメージを使用
 - GitLab CIでVulkan用イメージを作成し，JenkinsのVulkanジョブで使用
-
-## 既知の問題
-- 初回起動時，同じコンテナを使用するジョブを二つ同時に実行するとイメージの作成に失敗する
+- GitLabからのソース取得と，Pushによるジョブの起動
 
 ## 構成
 可能な限り再現性を保つため，コンテナ上で動作するようにする．
@@ -45,7 +43,6 @@ CI/CD の学習用レポジトリ．
 まずは経験のあるLinuxコンテナで構築する．
 
 >※現状x86_64Linuxでしか完全動作しません！  
-bareレポジトリをローカルに作成し，それに対するPushによってJenkinsのビルドがトリガーされるようにするが，bareレポジトリの作成シェルスクリプトはmacOSもしくはLinux用である．  
 vulkanのビルドはaarch64(Apple Silicon)環境では動作しないため注意．
 Windows(PowerShell)は今後対応予定．
 
@@ -95,7 +92,7 @@ C++ builder
   - localhost:5050/root/cpp-builder-image:latest
   - gcc:latestをベースにGitLab CIで作成
   - g++
-  - /workspaceにマウントされたsrc/hello.cppをコンパイル，実行
+  - Jenkinsの作業ディレクトリにcheckoutしたsrc/hello.cppをコンパイル，実行
   - コンパイル，実行後はコンテナごと破棄
 ```
 
@@ -122,7 +119,7 @@ Vulkan builder
 - `cppcheck-error` : cppcheckによる静的解析でエラーが出た場合にビルド失敗とするジョブ．
 - `vulkan` : Vulkanコードをビルドし，headless実行して描画結果をartifactに保存するジョブ．
 
-このjobはローカルのbareレポジトリからレポジトリルートの`Jenkinsfile_*`を読み込む．初回セットアップでは`scripts/setup-local-remote.sh`がコミット済みの内容をローカルbareレポジトリへ反映するため，手動でJenkinsfileだけをpushする必要はない．
+このjobはGitLabのレポジトリから`Jenkinsfile_*`を読み込む．
 
 これにより，Jenkins上でジョブを手動で構築することなく，構築された状態で起動する．
 
@@ -132,38 +129,20 @@ Vulkan builder
 docker compose restart jenkins
 ```
 
-### ローカルremote
-GitHubにはpushせず，レポジトリ内のローカルbareレポジトリをリモートとして使う．
+### GitLabのレポジトリ
+ソースコード用の`handmade-cicd`と，イメージ作成用の`cpp-builder-image`を使用する．
+各ジョブは`handmade-cicd`からそれぞれのJenkinsfileを読み込む．
 
-初回にローカルリモートレポジトリを作成し，現在のコミット済みの内容をmirror pushする．
+GitLabへのPushをWebhookでJenkinsへ通知する．変更されたファイルによって起動するジョブを分ける．
 
-ローカルbareレポジトリの作成と Jenkins のビルドトリガー用の認証トークンの生成用シェルスクリプト
-```sh
-bash scripts/setup-local-remote.sh
-```
+| 変更するファイル | 起動するジョブ |
+| --- | --- |
+| `src/hello.cpp`，`Jenkinsfile`，`Jenkinsfile_hello` | `cpp-hello` |
+| `src/overflow.cpp`，`Jenkinsfile_warning` | `cppcheck-warning` |
+| `src/memleak.cpp`，`Jenkinsfile_error` | `cppcheck-error` |
+| `src/vulkan.cpp`，`src/shader.slang`，`Jenkinsfile_Vulkan` | `vulkan` |
 
-以後はローカルリモートにpushする．
-```sh
-git add (ビルドするファイルへのパス)
-```
-
-```sh
-git commit -m "コメント"
-```
-
-```sh
-git push local HEAD:main
-```
-
-ローカルリモートの`post-receive`hookが変更されたファイルを見て，該当するJenkinsジョブを起動する．
-例えば`src/hello.cpp`や`Jenkinsfile_hello`が変われば`cpp-hello`，`src/overflow.cpp`や`Jenkinsfile_warning`が変われば`cppcheck-warning`，`src/memleak.cpp`や`Jenkinsfile_error`が変われば`cppcheck-error`，`src/vulkan.cpp`や`src/shader.slang`や`Jenkinsfile_Vulkan`が変われば`vulkan`が動く．
-
-ローカルbareレポジトリからのcheckoutを許可するため，Jenkinsコンテナに`JAVA_TOOL_OPTIONS`で`hudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true` を設定する必要がある．
-また，Jenkinsコンテナ内のGitが`/workspace/.local/git/handmade-cicd.git`をcheckoutできるように，Jenkinsイメージ内で`safe.directory`に登録している．
-
-`Jenkinsfile_*`を更新した場合は，変更したファイルを`git add`し，`git commit -m "コメント"`，`git push local HEAD:main`をする．今は`dev`ブランチで作業しているため，push先の`main`を指定する．
-
-一方で，`scripts/setup-local-remote.sh`や`jenkins/init.groovy.d/create-cpp-job.groovy`を更新した場合は，`bash scripts/setup-local-remote.sh`を再実行し，必要ならJenkinsを再起動する．(未検証)
+ビルド用コンテナは`--volumes-from jenkins-test`でJenkinsのボリュームを使用する．作業ディレクトリは`$WORKSPACE`とし，GitLabからcheckoutしたソースをビルドする．
 
 CppCheckを使う場合は，GitLab Container Registryから`localhost:5050/root/cpp-builder-image/cppcheck:latest`をpullして静的解析を行う．cppcheckのイメージはGitLab CIでビルドする．
 
@@ -182,7 +161,7 @@ CppCheckを使う場合は，GitLab Container Registryから`localhost:5050/root
 実行時に入力待ちで終わらない状態となるのを防ぐため，タイムアウトを設定している．
 
 GitLab CIではC++ビルド用とcppcheck用のイメージを作り，Jenkinsではそれぞれのイメージを使ってビルドと静的解析を行う．
-C++コードの変更によるジョブの起動は，これまでどおりローカルremoteへのpushを使う．
+ソースコードは`handmade-cicd`へpushする．イメージの更新は`cpp-builder-image`で行う．
 
 ### 静的解析
 cppcheckによる静的解析をビルド前に行う．
@@ -305,6 +284,13 @@ SSH鍵を登録した端末からGitLabへの接続を確認する．
 ssh -T -p 2424 git@localhost
 ```
 
+※GitLabを作り直すとSSHのホスト鍵も変わる．その場合に`REMOTE HOST IDENTIFICATION HAS CHANGED`が出たら，古い登録を削除して再接続する．
+```sh
+ssh-keygen -R '[localhost]:2424'
+ssh -T -p 2424 git@localhost
+```
+別端末から接続している場合は，`localhost`を使用しているホスト名またはIPに置き換える．
+
 `cpp-builder-image`をcloneし，このリポジトリに置いた設定ファイルをコピーする．今回は`handmade-cicd`の一つ上のディレクトリにcloneする．
 別端末から接続する場合は，`localhost`をGitLabのホスト名またはIPに置き換える．
 ```sh
@@ -324,12 +310,38 @@ GitLabの`Build` → `Pipelines`でパイプラインの結果を確認する．
 
 `.gitlab-ci.yml`とDockerfileは`gitlab/projects/cpp-builder-image`に置いてある．cppcheck用とVulkan用のDockerfileはそれぞれ`gitlab/projects/cpp-builder-image/cppcheck/Dockerfile`，`gitlab/projects/cpp-builder-image/vulkan/Dockerfile`に置く．GitLab側のプロジェクトで変更する場合は，コピーした先で編集する．
 
-### 6. Jenkinsを起動する
-ローカルbareレポジトリを作成し，コミット済みのJenkinsfileやsrc配下のファイルを反映する．
+### 6. ソースコード用のプロジェクトを作成する
+GitLabに`root`でログインし，`Projects` → `Create a project` → `Create blank project`を開く．
 
+- Project name：`handmade-cicd`
+- Project URL / namespace：`root`
+- Project slug：`handmade-cicd`
+- Visibility Level：`Public`
+- `Initialize repository with a README`：チェックしない
+
+イメージ用の`cpp-builder-image`とは別のプロジェクト．C++，VulkanのソースコードとJenkinsfileは全てここに置く．
+
+GitLab用のremoteを追加する．GitHub用の`origin`は変更しない．
 ```sh
-bash scripts/setup-local-remote.sh
+git remote add gitlab ssh://git@localhost:2424/root/handmade-cicd.git
 ```
+既に`gitlab`を追加している場合は，`git remote get-url gitlab`で接続先を確認する．変更する場合は以下．
+```sh
+git remote set-url gitlab ssh://git@localhost:2424/root/handmade-cicd.git
+```
+
+pushには手順2で登録したSSH鍵を使用する．
+
+まずは現在のコミットをGitLabの`main`へpushする．未コミットの変更は反映されないため，Jenkinsfile等を変更している場合は先にコミットする．
+```sh
+git push -u gitlab HEAD:main
+```
+
+Jenkinsからは`http://gitlab:8929/root/handmade-cicd.git`でソースを取得する．Publicにしているため，取得用の認証情報は不要．
+
+namespaceやプロジェクト名を変える場合は，`.env`に`GITLAB_REPO_URL`を設定する．コンテナ間の接続なので，ホスト名は`gitlab`を使用する．
+
+### 7. Jenkinsを起動する
 
 GitLab CIでContainer RegistryにイメージができてからJenkinsを起動する．
 
@@ -348,12 +360,35 @@ http://localhost:8080
 `cpp-hello`はジョブの詳細画面から`Console Output`を確認し，イメージのpullとC++のビルド，入出力テストが成功しているかを確認．
 `vulkan`はビルド結果画面の`Build Artifacts`から`artifacts/vulkan/vulkan.png`を開いて三角形が描画されているかを確認．
 
-GitLabのプロジェクトはPublicにしているため，Jenkins側ではRegistryへのログインを設定していない．
+イメージ用の`cpp-builder-image`はPublicにしているため，Jenkins側ではRegistryへのログインを設定していない．
 
-※Jenkins起動後にローカルリモートを作り直した場合は，Jenkinsを再起動する．
+`cppcheck-warning`はUNSTABLE，`cppcheck-error`はFAILUREになることを確認する．静的解析でwarning，errorが出るサンプルを使っているため，この結果で良い．
+
+`.env`を変更した場合は`docker compose up -d --build jenkins`でコンテナを作り直す．ジョブ作成のGroovyだけを更新した場合は`docker compose restart jenkins`で良い．
+
+### 8. Pushでジョブを起動する
+Jenkinsの`管理` → `Security` → `Git plugin notifyCommit access tokens`でJenkinsへPushを通知するための通知用トークンを作成する．
+
+GitLabの`Admin` → `Settings` → `Network` → `Outbound requests`で，`Local IP addresses and domain names that hooks and integrations can access`に`jenkins:8080`を追加して保存．
+
+`handmade-cicd`の`Settings` → `Webhooks`で以下を設定する．
+
+- URL：`http://jenkins:8080/git/notifyCommit?url=http%3A%2F%2Fgitlab%3A8929%2Froot%2Fhandmade-cicd.git&token=(Jenkinsの通知用トークン)`
+- Trigger：`Push events`
+
+※`GITLAB_REPO_URL`を変更した場合は，Webhookの`url`も同じURLをURLエンコードして指定する．通知先のホスト名は`jenkins`．
+
+保存後，`Test` → `Push events`でHTTP 200になることを確認する．
+
+変更の確認には前回のcheckoutを使うので，各ジョブは手順7で一度実行しておく．Poll SCMはGroovyで設定する．スケジュールは空とし，Webhookを受けた時だけ変更を確認する．
+
+例えば`src/hello.cpp`を変更して，GitLabへpushする．
 ```sh
-docker compose restart jenkins
+git add src/hello.cpp
+git commit -m "コメント"
+git push gitlab HEAD:main
 ```
+Jenkinsで`cpp-hello`が起動することを確認する．Vulkanの場合は`src/vulkan.cpp`または`src/shader.slang`を変更する．READMEだけの変更ではジョブは起動しない．
 
 ## 注意
 学習目的のためセキュリティが甘いです．
@@ -382,3 +417,8 @@ docker compose restart jenkins
   - https://github.com/Facthunder/cppcheck.git
 - Vulkanのドキュメント(環境構築)
   - https://docs.vulkan.org/tutorial/latest/02_Development_environment.html#_linux
+
+- Gitプラグインの変更通知とPoll SCM：
+  - https://plugins.jenkins.io/git/#push-notification-from-repository
+- GitLabのWebhook接続先の許可：
+  - https://docs.gitlab.com/security/webhooks/
